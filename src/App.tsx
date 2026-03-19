@@ -11,6 +11,7 @@ import { useContentChecks } from './hooks/useDataverse';
 import { theme } from './theme';
 import type { ContentCheck } from './types/dataverse';
 import { trackNavigation, trackStoryClick, trackBackClick, identifyUser, setTag } from './services/clarity';
+import { fetchCurrentUser } from './services/api';
 
 interface DrillContext {
   title: string;
@@ -35,25 +36,18 @@ function App() {
 
   const data = useContentChecks();
 
-  // Identify user in Clarity (Power Apps / Xrm context)
+  // Identify user in Clarity via Dataverse WhoAmI
   useEffect(() => {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const xrm = (window as any).Xrm;
-      const userSettings = xrm?.Utility?.getGlobalContext?.()?.userSettings;
-      if (userSettings) {
-        const userId = userSettings.userId?.replace(/[{}]/g, '') ?? '';
-        const userName = userSettings.userName ?? '';
-        const email = userSettings.userEmail ?? '';
-        if (userId) {
-          identifyUser(userId, undefined, undefined, userName);
-          if (userName) setTag('user_name', userName);
-          if (email) setTag('user_email', email);
-        }
+    fetchCurrentUser().then((user) => {
+      if (user) {
+        identifyUser(user.userId, undefined, undefined, user.fullName);
+        if (user.fullName) setTag('user_name', user.fullName);
+        if (user.email) setTag('user_email', user.email);
+        console.log(`[Clarity] Identified user: ${user.fullName} (${user.email})`);
       }
-    } catch {
-      // Not in Power Apps context — skip identification
-    }
+    }).catch(() => {
+      // User identification failed — non-critical, continue without it
+    });
   }, []);
 
   const getScrollTop = useCallback(() => {

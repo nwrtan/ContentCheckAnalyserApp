@@ -66,6 +66,11 @@ export async function submitFeedback(contentCheckId: string, feedback: string): 
   return api.submitFeedback(contentCheckId, feedback);
 }
 
+export async function fetchCurrentUser(): Promise<{ userId: string; fullName: string; email: string } | null> {
+  const api = await getApi();
+  return api.fetchCurrentUser();
+}
+
 export async function debugFetchAllColumns(): Promise<void> {
   const api = await getApi();
   return api.debugFetchAllColumns();

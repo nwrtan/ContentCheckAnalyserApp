@@ -225,6 +225,35 @@ export async function submitFeedback(
   console.log(`[Dataverse-Direct] Feedback submitted for ${contentCheckId}`);
 }
 
+// ── Current User (WhoAmI) ──
+
+export async function fetchCurrentUser(): Promise<{ userId: string; fullName: string; email: string } | null> {
+  try {
+    const whoResp = await fetch(`${BASE}/WhoAmI`, {
+      headers: { 'OData-MaxVersion': '4.0', 'OData-Version': '4.0' },
+    });
+    if (!whoResp.ok) return null;
+    const whoData = await whoResp.json();
+    const systemUserId: string = whoData?.UserId ?? '';
+    if (!systemUserId) return null;
+
+    const userResp = await fetch(
+      `${BASE}/systemusers(${systemUserId})?$select=systemuserid,fullname,internalemailaddress`,
+      { headers: { 'OData-MaxVersion': '4.0', 'OData-Version': '4.0' } }
+    );
+    if (!userResp.ok) return null;
+    const user = await userResp.json();
+    return {
+      userId: systemUserId,
+      fullName: user.fullname ?? '',
+      email: user.internalemailaddress ?? '',
+    };
+  } catch (e) {
+    console.error('[Dataverse-Direct] fetchCurrentUser error:', e);
+    return null;
+  }
+}
+
 // ── Debug ──
 
 export async function debugFetchAllColumns(): Promise<void> {

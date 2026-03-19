@@ -254,3 +254,43 @@ export async function submitFeedback(
     throw e;
   }
 }
+
+// ──────────────────────────────────────────────
+// Current User (WhoAmI)
+// ──────────────────────────────────────────────
+
+export async function fetchCurrentUser(): Promise<{ userId: string; fullName: string; email: string } | null> {
+  const orgUrl = await getOrgUrl();
+  try {
+    const whoAmI = await MicrosoftDataverseService.PerformUnboundActionWithOrganization(
+      orgUrl,
+      'WhoAmI'
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = whoAmI.data as any;
+    const systemUserId: string = data?.UserId ?? data?.userid ?? '';
+    if (!systemUserId) return null;
+
+    // Fetch user record for name and email
+    const userResult = await MicrosoftDataverseService.GetItemWithOrganization(
+      'return=representation',
+      'application/json',
+      orgUrl,
+      'systemusers',
+      systemUserId,
+      undefined,
+      undefined,
+      'systemuserid,fullname,internalemailaddress'
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const user = (userResult.data ?? {}) as any;
+    return {
+      userId: systemUserId,
+      fullName: user.fullname ?? '',
+      email: user.internalemailaddress ?? '',
+    };
+  } catch (e) {
+    console.error('[Dataverse] fetchCurrentUser error:', e);
+    return null;
+  }
+}
