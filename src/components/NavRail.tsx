@@ -1,4 +1,5 @@
 import { theme } from '../theme';
+import { version } from '../../package.json';
 
 export type Screen = 'overview' | 'comparison' | 'discrepancies' | 'article' | 'trends' | 'drill';
 
@@ -163,7 +164,7 @@ export function NavRail({ active, onNavigate }: NavRailProps) {
       >
         Newsweek Editorial
         <br />
-        v1.2.0
+        v{version}
       </div>
     </nav>
   );
