@@ -1,32 +1,67 @@
 /**
  * Microsoft Clarity analytics integration.
  *
- * Provides:
- * - Clarity script initialization
- * - User identification (username + email)
- * - Custom event tracking for buttons, navigation, feedback, etc.
- * - Custom tags for filtering in Clarity dashboard
+ * Initialisation follows the same pattern as the Editorial Workflow app:
+ * 1. getContext() fetches user info from the Power Apps host
+ * 2. initClarity() injects the script AND identifies the user in one call
+ * 3. trackEvent / setTag helpers fire custom events throughout the app
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// Dev: vy7owg41w9   |   Prod: vxqbidl42b
-// Power Apps play URL contains the environment ID — use it to pick the right project
-function getClarityProjectId(): string {
-  const DEV_ENV_ID = 'cea67299-6d6a-ec0f-8104-18c5691d8211';
-  const href = window.location.href;
-  // Local dev or Dev environment → Dev Clarity project
-  if (href.includes('localhost') || href.includes(DEV_ENV_ID)) {
-    return 'vy7owg41w9';
-  }
-  return 'vxqbidl42b';
-}
+// ── Types ──
 
-// ── Clarity global type ──
+export interface UserInfo {
+  fullName: string;
+  userPrincipalName: string;
+  objectId: string;
+}
 
 declare global {
   interface Window {
-    clarity: (...args: any[]) => void;
+    clarity?: (...args: unknown[]) => void;
+  }
+}
+
+// ── Clarity tracking IDs per environment ──
+
+const CLARITY_IDS: Record<string, string> = {
+  dev: 'vy7owg41w9',
+  prod: 'vxqbidl42b',
+};
+
+function getEnvKey(): string {
+  const DEV_ENV_ID = 'cea67299-6d6a-ec0f-8104-18c5691d8211';
+  const href = window.location.href;
+  if (href.includes('localhost') || href.includes(DEV_ENV_ID)) {
+    return 'dev';
+  }
+  return 'prod';
+}
+
+// ── Get user info from Power Apps context ──
+
+export async function getUserInfo(): Promise<UserInfo | null> {
+  try {
+    console.log('[clarity] getUserInfo: calling getContext()...');
+    const { getContext } = await import('@microsoft/power-apps/app');
+    const ctx = await getContext();
+    console.log('[clarity] getContext() returned:', JSON.stringify(ctx.user));
+
+    const user = ctx.user;
+    if (!user?.userPrincipalName && !user?.fullName) {
+      console.warn('[clarity] getContext() returned empty user');
+      return null;
+    }
+
+    return {
+      fullName: user.fullName ?? '',
+      userPrincipalName: user.userPrincipalName ?? '',
+      objectId: user.objectId ?? '',
+    };
+  } catch (err) {
+    console.warn('[clarity] getUserInfo failed:', err instanceof Error ? err.message : err);
+    return null;
   }
 }
 
@@ -34,64 +69,88 @@ declare global {
 
 let _initialized = false;
 
-export function initClarity(): void {
+/**
+ * Initialise Clarity and (optionally) identify the current user.
+ *
+ * @param user - User info to attach to the Clarity session.
+ */
+export function initClarity(user?: UserInfo | null): void {
   if (_initialized) return;
   _initialized = true;
 
-  const projectId = getClarityProjectId();
-  console.log(`[Clarity] Initializing with project ID: ${projectId}`);
+  try {
+    const env = getEnvKey();
+    const trackingId = CLARITY_IDS[env] ?? CLARITY_IDS['dev'];
 
-  // Clarity bootstrap snippet
-  (function (c: any, l: Document, a: string, r: string, i: string) {
-    c[a] =
-      c[a] ||
-      function () {
-        (c[a].q = c[a].q || []).push(arguments);
-      };
-    const t = l.createElement(r) as HTMLScriptElement;
-    t.async = true;
-    t.src = 'https://www.clarity.ms/tag/' + i;
-    const y = l.getElementsByTagName(r)[0];
-    y.parentNode!.insertBefore(t, y);
-  })(window, document, 'clarity', 'script', projectId);
+    if (!trackingId) {
+      console.warn('[clarity] No tracking ID for env:', env);
+      return;
+    }
+
+    injectClarityScript(trackingId);
+    console.log('[clarity] Loaded with tracking ID:', trackingId, `(${env})`);
+
+    if (user) {
+      identifyUser(user, env);
+    }
+  } catch (err) {
+    console.warn('[clarity] Failed to load:', err instanceof Error ? err.message : err);
+  }
 }
 
-// ── User identification ──
+// ── Private helpers ──
 
-/**
- * Identify the current user in Clarity so sessions can be filtered by user.
- * Call once after you know who the user is.
- *
- * @see https://learn.microsoft.com/en-us/clarity/setup-and-installation/identify-api
- */
-export function identifyUser(
-  userId: string,
-  sessionId?: string,
-  pageName?: string,
-  friendlyName?: string
-): void {
-  if (typeof window.clarity !== 'function') return;
-  window.clarity('identify', userId, sessionId, pageName, friendlyName);
+function identifyUser(user: UserInfo, env: string): void {
+  if (!window.clarity) return;
+
+  try {
+    // identify(customUserId, customSessionId?, customPageId?, friendlyName?)
+    window.clarity('identify', user.userPrincipalName, undefined, undefined, user.fullName);
+
+    // Custom session-level tags (appear under Filters → Custom tags)
+    window.clarity('set', 'userName', user.fullName);
+    window.clarity('set', 'userEmail', user.userPrincipalName);
+    window.clarity('set', 'userId', user.objectId);
+    window.clarity('set', 'environment', env);
+
+    console.log('[clarity] User identified:', user.fullName, `(${user.userPrincipalName})`);
+  } catch (err) {
+    console.warn('[clarity] Failed to identify user:', err instanceof Error ? err.message : err);
+  }
 }
 
-/**
- * Set a custom tag (key-value pair) that appears as a filter in Clarity.
- */
-export function setTag(key: string, value: string): void {
-  if (typeof window.clarity !== 'function') return;
-  window.clarity('set', key, value);
+function injectClarityScript(trackingId: string): void {
+  if (window.clarity) return;
+
+  // Initialize the clarity command queue
+  window.clarity = function (...args: unknown[]) {
+    (window.clarity as unknown as { q: unknown[][] }).q =
+      (window.clarity as unknown as { q: unknown[][] }).q || [];
+    (window.clarity as unknown as { q: unknown[][] }).q.push(args);
+  };
+
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = `https://www.clarity.ms/tag/${trackingId}`;
+  document.head.appendChild(script);
 }
 
 // ── Custom event tracking ──
 
 /**
  * Fire a Clarity custom event.
- * Events appear in the Clarity dashboard under "Custom events" and can be used
- * as filters on session recordings + heatmaps.
  */
 export function trackEvent(eventName: string): void {
-  if (typeof window.clarity !== 'function') return;
+  if (!window.clarity) return;
   window.clarity('event', eventName);
+}
+
+/**
+ * Set a custom tag (key-value pair) that appears as a filter in Clarity.
+ */
+export function setTag(key: string, value: string): void {
+  if (!window.clarity) return;
+  window.clarity('set', key, value);
 }
 
 // ── Convenience wrappers (one per tracked action) ──

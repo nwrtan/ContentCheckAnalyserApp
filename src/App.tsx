@@ -10,8 +10,7 @@ import { DrillDownScreen } from './components/DrillDownScreen';
 import { useContentChecks } from './hooks/useDataverse';
 import { theme } from './theme';
 import type { ContentCheck } from './types/dataverse';
-import { trackNavigation, trackStoryClick, trackBackClick, identifyUser, setTag } from './services/clarity';
-import { fetchCurrentUser } from './services/api';
+import { trackNavigation, trackStoryClick, trackBackClick, initClarity, getUserInfo } from './services/clarity';
 
 interface DrillContext {
   title: string;
@@ -36,23 +35,16 @@ function App() {
 
   const data = useContentChecks();
 
-  // Identify user in Clarity via Dataverse WhoAmI
+  // Initialise Clarity: get user info first, then init with user context
   useEffect(() => {
-    console.log('[Clarity] Starting user identification...');
-    fetchCurrentUser().then((user) => {
-      console.log('[Clarity] fetchCurrentUser returned:', user);
-      if (user && user.userId) {
-        identifyUser(user.userId, undefined, undefined, user.fullName || user.userId);
-        if (user.fullName) setTag('user_name', user.fullName);
-        if (user.email) setTag('user_email', user.email);
-        setTag('user_id', user.userId);
-        console.log(`[Clarity] Identified user: ${user.fullName} (${user.email}) [${user.userId}]`);
-      } else {
-        console.warn('[Clarity] No user data returned — user tags will not be set');
-      }
-    }).catch((e) => {
-      console.error('[Clarity] User identification failed:', e);
-    });
+    getUserInfo()
+      .then((user) => {
+        initClarity(user);
+      })
+      .catch(() => {
+        // User info unavailable — init Clarity without user tags
+        initClarity();
+      });
   }, []);
 
   const getScrollTop = useCallback(() => {
