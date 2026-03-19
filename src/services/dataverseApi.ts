@@ -261,17 +261,36 @@ export async function submitFeedback(
 
 export async function fetchCurrentUser(): Promise<{ userId: string; fullName: string; email: string } | null> {
   const orgUrl = await getOrgUrl();
+
+  // ── Step 1: Get current user ID via WhoAmI ──
+  let systemUserId = '';
   try {
+    console.log('[Dataverse] fetchCurrentUser: calling WhoAmI...');
     const whoAmI = await MicrosoftDataverseService.PerformUnboundActionWithOrganization(
       orgUrl,
       'WhoAmI'
     );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = whoAmI.data as any;
-    const systemUserId: string = data?.UserId ?? data?.userid ?? '';
-    if (!systemUserId) return null;
+    console.log('[Dataverse] WhoAmI raw response:', JSON.stringify(whoAmI));
 
-    // Fetch user record for name and email
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (whoAmI?.data ?? whoAmI) as any;
+    // Try all possible casing variants
+    systemUserId = data?.UserId ?? data?.userid ?? data?.userId
+      ?? data?.body?.UserId ?? data?.body?.userid ?? '';
+
+    console.log(`[Dataverse] WhoAmI userId: "${systemUserId}"`);
+  } catch (e) {
+    console.error('[Dataverse] WhoAmI failed:', e);
+  }
+
+  if (!systemUserId) {
+    console.warn('[Dataverse] WhoAmI did not return a user ID, skipping user identification');
+    return null;
+  }
+
+  // ── Step 2: Fetch user record for name and email ──
+  try {
+    console.log(`[Dataverse] Fetching systemuser record: ${systemUserId}`);
     const userResult = await MicrosoftDataverseService.GetItemWithOrganization(
       'return=representation',
       'application/json',
@@ -282,15 +301,20 @@ export async function fetchCurrentUser(): Promise<{ userId: string; fullName: st
       undefined,
       'systemuserid,fullname,internalemailaddress'
     );
+    console.log('[Dataverse] systemuser raw response:', JSON.stringify(userResult));
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const user = (userResult.data ?? {}) as any;
-    return {
+    const user = (userResult?.data ?? userResult ?? {}) as any;
+    const result = {
       userId: systemUserId,
-      fullName: user.fullname ?? '',
-      email: user.internalemailaddress ?? '',
+      fullName: user.fullname ?? user.FullName ?? '',
+      email: user.internalemailaddress ?? user.InternalEmailAddress ?? '',
     };
+    console.log('[Dataverse] fetchCurrentUser result:', JSON.stringify(result));
+    return result;
   } catch (e) {
-    console.error('[Dataverse] fetchCurrentUser error:', e);
-    return null;
+    console.error('[Dataverse] Fetching systemuser failed:', e);
+    // Return at least the userId even if we can't get name/email
+    return { userId: systemUserId, fullName: '', email: '' };
   }
 }

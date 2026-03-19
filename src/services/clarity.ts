@@ -10,7 +10,17 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const CLARITY_PROJECT_ID = 'vxqbidl42b';
+// Dev: vy7owg41w9   |   Prod: vxqbidl42b
+// Power Apps play URL contains the environment ID — use it to pick the right project
+function getClarityProjectId(): string {
+  const DEV_ENV_ID = 'cea67299-6d6a-ec0f-8104-18c5691d8211';
+  const href = window.location.href;
+  // Local dev or Dev environment → Dev Clarity project
+  if (href.includes('localhost') || href.includes(DEV_ENV_ID)) {
+    return 'vy7owg41w9';
+  }
+  return 'vxqbidl42b';
+}
 
 // ── Clarity global type ──
 
@@ -28,6 +38,9 @@ export function initClarity(): void {
   if (_initialized) return;
   _initialized = true;
 
+  const projectId = getClarityProjectId();
+  console.log(`[Clarity] Initializing with project ID: ${projectId}`);
+
   // Clarity bootstrap snippet
   (function (c: any, l: Document, a: string, r: string, i: string) {
     c[a] =
@@ -40,7 +53,7 @@ export function initClarity(): void {
     t.src = 'https://www.clarity.ms/tag/' + i;
     const y = l.getElementsByTagName(r)[0];
     y.parentNode!.insertBefore(t, y);
-  })(window, document, 'clarity', 'script', CLARITY_PROJECT_ID);
+  })(window, document, 'clarity', 'script', projectId);
 }
 
 // ── User identification ──

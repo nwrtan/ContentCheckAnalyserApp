@@ -38,15 +38,20 @@ function App() {
 
   // Identify user in Clarity via Dataverse WhoAmI
   useEffect(() => {
+    console.log('[Clarity] Starting user identification...');
     fetchCurrentUser().then((user) => {
-      if (user) {
-        identifyUser(user.userId, undefined, undefined, user.fullName);
+      console.log('[Clarity] fetchCurrentUser returned:', user);
+      if (user && user.userId) {
+        identifyUser(user.userId, undefined, undefined, user.fullName || user.userId);
         if (user.fullName) setTag('user_name', user.fullName);
         if (user.email) setTag('user_email', user.email);
-        console.log(`[Clarity] Identified user: ${user.fullName} (${user.email})`);
+        setTag('user_id', user.userId);
+        console.log(`[Clarity] Identified user: ${user.fullName} (${user.email}) [${user.userId}]`);
+      } else {
+        console.warn('[Clarity] No user data returned — user tags will not be set');
       }
-    }).catch(() => {
-      // User identification failed — non-critical, continue without it
+    }).catch((e) => {
+      console.error('[Clarity] User identification failed:', e);
     });
   }, []);
 
