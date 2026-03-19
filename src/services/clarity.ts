@@ -31,9 +31,11 @@ const CLARITY_IDS: Record<string, string> = {
 };
 
 function getEnvKey(): string {
+  // Power Apps URLs strip hyphens from the environment ID, so check both formats
   const DEV_ENV_ID = 'cea67299-6d6a-ec0f-8104-18c5691d8211';
-  const href = window.location.href;
-  if (href.includes('localhost') || href.includes(DEV_ENV_ID)) {
+  const DEV_ENV_ID_NO_HYPHENS = DEV_ENV_ID.replace(/-/g, '');
+  const href = window.location.href + document.referrer;
+  if (href.includes('localhost') || href.includes(DEV_ENV_ID) || href.includes(DEV_ENV_ID_NO_HYPHENS)) {
     return 'dev';
   }
   return 'prod';
