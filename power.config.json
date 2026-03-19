@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "appId": "94154b5f-c23f-44de-bcf3-1266c7a9be66",
+  "appDisplayName": "Content Check Analyser",
+  "region": "prod",
+  "environmentId": "cea67299-6d6a-ec0f-8104-18c5691d8211",
+  "description": "Dashboard for analysing AI content checks against editorial articles",
+  "buildPath": "./dist",
+  "buildEntryPoint": "index.html",
+  "localAppUrl": "http://localhost:5173/",
+  "logoPath": "Default",
+  "connectionReferences": {
+    "dataverse-current-env": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_commondataservice",
+      "displayName": "Microsoft Dataverse (current environment)",
+      "dataSources": [
+        "commondataserviceforapps"
+      ],
+      "authenticationType": null,
+      "sharedConnectionId": "dfd6019be50e437887b36a44ced40ed1",
+      "dataSets": {}
+    },
+    "dataverse-any-env": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps",
+      "displayName": "Microsoft Dataverse",
+      "dataSources": [
+        "commondataserviceforapps"
+      ],
+      "authenticationType": null,
+      "sharedConnectionId": "1f99625568b041c5a927aea57012ced9",
+      "dataSets": {}
+    }
+  },
+  "databaseReferences": {
+    "default.cds": {
+      "dataSources": {
+        "environmentvariabledefinitions": {
+          "entitySetName": "environmentvariabledefinitions",
+          "logicalName": "environmentvariabledefinition"
+        }
+      },
+      "environmentVariableName": ""
+    }
+  }
+}
