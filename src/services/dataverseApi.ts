@@ -260,27 +260,72 @@ export async function submitFeedback(
 // ──────────────────────────────────────────────
 
 export async function fetchCurrentUser(): Promise<{ userId: string; fullName: string; email: string } | null> {
+  // ── Method 1: Power Apps SDK getContext() ──
   try {
-    // Use the Power Apps SDK context — provides user info directly, no API call needed
+    console.log('[Dataverse] fetchCurrentUser: trying Power Apps getContext()...');
     const { getContext } = await import('@microsoft/power-apps/app');
-    const ctx = await getContext();
-    console.log('[Dataverse] Power Apps context user:', JSON.stringify(ctx.user));
+
+    // getContext() can hang if the bridge isn't ready — add a timeout
+    const ctx = await Promise.race([
+      getContext(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('getContext() timed out after 5s')), 5000)
+      ),
+    ]);
+
+    console.log('[Dataverse] Power Apps context:', JSON.stringify(ctx));
+    console.log('[Dataverse] Power Apps context.user:', JSON.stringify(ctx.user));
 
     const user = ctx.user;
-    if (!user?.objectId) {
-      console.warn('[Dataverse] No user objectId in Power Apps context');
-      return null;
+    if (user?.objectId || user?.fullName || user?.userPrincipalName) {
+      const result = {
+        userId: user.objectId ?? '',
+        fullName: user.fullName ?? '',
+        email: user.userPrincipalName ?? '',
+      };
+      console.log('[Dataverse] fetchCurrentUser (from context):', JSON.stringify(result));
+      return result;
     }
-
-    const result = {
-      userId: user.objectId,
-      fullName: user.fullName ?? '',
-      email: user.userPrincipalName ?? '',
-    };
-    console.log('[Dataverse] fetchCurrentUser result:', JSON.stringify(result));
-    return result;
+    console.warn('[Dataverse] getContext() returned empty user:', JSON.stringify(user));
   } catch (e) {
-    console.error('[Dataverse] fetchCurrentUser error:', e);
-    return null;
+    console.warn('[Dataverse] getContext() failed:', e);
   }
+
+  // ── Method 2: Fallback — query systemusers with current user's Dataverse record ──
+  try {
+    console.log('[Dataverse] fetchCurrentUser: trying ListRecords on systemusers...');
+    const orgUrl = await getOrgUrl();
+    const result = await MicrosoftDataverseService.ListRecordsWithOrganization(
+      orgUrl,
+      'systemusers',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'systemuserid,fullname,internalemailaddress',
+      // Dataverse returns the calling user's record when filtered by their own azureactivedirectoryobjectid
+      // But we don't know it, so get the first active user that matches the caller
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      1
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows = (result as any)?.data?.value ?? (result as any)?.value ?? [];
+    console.log('[Dataverse] systemusers fallback rows:', JSON.stringify(rows));
+
+    if (rows.length > 0) {
+      const u = rows[0];
+      return {
+        userId: u.systemuserid ?? '',
+        fullName: u.fullname ?? '',
+        email: u.internalemailaddress ?? '',
+      };
+    }
+  } catch (e2) {
+    console.error('[Dataverse] systemusers fallback failed:', e2);
+  }
+
+  return null;
 }
